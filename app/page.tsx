@@ -10,6 +10,13 @@ const moments = [
   ["FINAL SCENE", "Evening together", "As daylight softens, make room for conversations, shared meals, and unhurried time with your people."],
 ];
 
+const villaSpaces = [
+  ["01", "Rooms", "A softer place to wake, rest and close the day.", "villa-space-room"],
+  ["02", "Pool", "Slow water, open sky and time with your people.", "villa-space-pool"],
+  ["03", "Garden", "A quieter outdoor pause between the moments of the day.", "villa-space-garden"],
+  ["04", "Kitchen & dining", "The shared space for long meals and easy conversation.", "villa-space-kitchen"],
+];
+
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [inquiryState, setInquiryState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -94,6 +101,15 @@ export default function Home() {
         <div className="villa-arrival-story"><p className="villa-kicker">A private arrival</p><span className="villa-chapter-number">01</span><h2>Let Udaipur<br />open <em>slowly.</em></h2><p>Past the usual rush, a quieter address waits. It is a place to arrive without performing the holiday—just step in, exhale, and let the day unfold.</p></div>
       </motion.section>
 
+      <motion.section className="villa-spaces" aria-label="Inside Rudransh Villa" {...reveal}>
+        <div className="villa-spaces-heading"><p className="villa-kicker">Inside Rudransh</p><h2>Every corner has<br />a part in the <em>story.</em></h2><p>From a calm room to the garden, pool and shared kitchen, the villa is made for a stay that unfolds naturally.</p></div>
+        <div className="villa-space-grid">
+          {villaSpaces.map(([number, title, copy, imageClass], index) => <motion.article className={`villa-space-card ${imageClass}`} key={title} initial={reducedMotion ? false : { opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65, delay: reducedMotion ? 0 : index * 0.1, ease: "circOut" }}>
+            <div className="villa-space-image" aria-hidden="true" /><div className="villa-space-copy"><span>{number}</span><h3>{title}</h3><p>{copy}</p></div>
+          </motion.article>)}
+        </div>
+      </motion.section>
+
       <motion.section className="villa-city-story" id="experience" ref={cityStoryRef} {...reveal}>
         <motion.div className="villa-city-story-image" aria-hidden="true" style={reducedMotion ? undefined : { y: cityImageY }} />
         <span className="villa-film-edge" aria-hidden="true" />
@@ -129,7 +145,7 @@ export default function Home() {
         <a className="villa-contact-email" href="mailto:rudranshvillaudaipur@gmail.com">rudranshvillaudaipur@gmail.com <span>↗</span></a>
       </motion.section>
 
-      <footer className="villa-footer"><span>© Rudransh Villa</span><span>Udaipur, Rajasthan, India</span><span>Private homestay</span></footer>
+      <footer className="villa-footer"><span>© Rudransh Villa</span><nav aria-label="Stay guides"><a href="/luxury-villa-udaipur">Luxury villa</a><a href="/private-pool-villa-udaipur">Private pool villa</a><a href="/homestay-in-udaipur">Udaipur homestay</a></nav><span>Private homestay</span></footer>
     </main>
   );
 }
