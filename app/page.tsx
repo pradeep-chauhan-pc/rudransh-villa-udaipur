@@ -1,250 +1,135 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import Image from "next/image";
+import { FormEvent, useRef, useState } from "react";
+import { motion, useReducedMotion, useScroll, useTransform, type MotionProps } from "framer-motion";
 
-type Guest = {
-  name: string;
-  age: string;
-  gender: string;
-  idType: string;
-  idNumber: string;
-  front: File | null;
-  back: File | null;
-};
-
-const blankGuest = (): Guest => ({
-  name: "",
-  age: "",
-  gender: "",
-  idType: "Aadhaar Card",
-  idNumber: "",
-  front: null,
-  back: null,
-});
-
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const TARGET_FILE_BYTES = 1.5 * 1024 * 1024;
-
-async function optimisePhoto(file: File) {
-  if (file.size <= TARGET_FILE_BYTES) return file;
-
-  const bitmap = await createImageBitmap(file);
-  const maxDimension = 1800;
-  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("This photo could not be processed.");
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-
-  let quality = 0.82;
-  let blob: Blob | null = null;
-  do {
-    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-    quality -= 0.12;
-  } while (blob && blob.size > TARGET_FILE_BYTES && quality >= 0.34);
-
-  if (!blob) throw new Error("This photo could not be processed.");
-  const name = file.name.replace(/\.[^.]+$/, "") || "guest-id";
-  return new File([blob], `${name}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
-}
-
-function UploadField({
-  guestIndex,
-  side,
-  file,
-  onChange,
-}: {
-  guestIndex: number;
-  side: "front" | "back";
-  file: File | null;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-}) {
-  const id = `guest-${guestIndex}-${side}`;
-  return (
-    <div>
-      <label className="upload" htmlFor={id}>
-        <span className="upload-icon" aria-hidden="true">+</span>
-        <span>
-          <strong>{side === "front" ? "Front side" : "Back side"}</strong>
-          <small>{file ? file.name : "Tap to take or choose a photo"}</small>
-        </span>
-      </label>
-      <input
-        id={id}
-        className="sr-only"
-        type="file"
-        name={`guest_${guestIndex}_${side}`}
-        accept="image/jpeg,image/png,image/webp"
-        capture="environment"
-        required
-        onChange={onChange}
-      />
-    </div>
-  );
-}
+const moments = [
+  ["SCENE I", "Arrive and exhale", "Set your bags down, step into your private stay, and let the usual pace fall away."],
+  ["SCENE II", "The waterline", "When the afternoon asks less of you, the pool becomes the only plan worth keeping."],
+  ["FINAL SCENE", "Evening together", "As daylight softens, make room for conversations, shared meals, and unhurried time with your people."],
+];
 
 export default function Home() {
-  const [guestCount, setGuestCount] = useState(0);
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [message, setMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [inquiryState, setInquiryState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [inquiryMessage, setInquiryMessage] = useState("");
+  const reducedMotion = useReducedMotion();
+  const reveal: MotionProps = reducedMotion ? {} : { initial: { opacity: 0, y: 34 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: 0.18 }, transition: { duration: 0.75, ease: "circOut" } };
+  const cityStoryRef = useRef<HTMLElement>(null);
+  const { scrollYProgress: cityStoryProgress } = useScroll({ target: cityStoryRef, offset: ["start end", "end start"] });
+  const cityImageY = useTransform(cityStoryProgress, [0, 1], ["-7%", "7%"]);
 
-  const progress = useMemo(() => guestCount ? `${guestCount} ${guestCount === 1 ? "guest" : "guests"}` : "Not selected", [guestCount]);
-
-  function changeGuestCount(next: number) {
-    setGuestCount(next);
-    setGuests((current) => {
-      const updated = [...current];
-      while (updated.length < next) updated.push(blankGuest());
-      return updated.slice(0, next);
-    });
-  }
-
-  function updateGuest(index: number, field: keyof Guest, value: string | File | null) {
-    setGuests((current) => current.map((guest, i) => (i === index ? { ...guest, [field]: value } : guest)));
-  }
-
-  async function handleFile(index: number, side: "front" | "back", event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    if (file && file.size > MAX_UPLOAD_BYTES) {
-      event.target.value = "";
-      updateGuest(index, side, null);
-      setStatus("error");
-      setMessage("This photo is too large. Please choose a photo smaller than 8 MB.");
-      return;
-    }
-    try {
-      setStatus("idle");
-      setMessage(file && file.size > TARGET_FILE_BYTES ? "Optimising photo…" : "");
-      updateGuest(index, side, file ? await optimisePhoto(file) : null);
-      setMessage("");
-    } catch {
-      event.target.value = "";
-      updateGuest(index, side, null);
-      setStatus("error");
-      setMessage("This photo format could not be processed. Please use a JPG, PNG or WebP image.");
-    }
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function submitInquiry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const checkIn = String(new FormData(form).get("checkIn") ?? "");
-    const checkOut = String(new FormData(form).get("checkOut") ?? "");
+    const formData = new FormData(form);
+    const checkIn = String(formData.get("checkIn") ?? "");
+    const checkOut = String(formData.get("checkOut") ?? "");
     if (checkIn && checkOut && checkOut <= checkIn) {
-      setStatus("error");
-      setMessage("Check-out date must be after the check-in date.");
-      form.querySelector<HTMLInputElement>('input[name="checkOut"]')?.focus();
+      setInquiryState("error");
+      setInquiryMessage("Please select a check-out date after your check-in date.");
       return;
     }
-    setStatus("sending");
-    setMessage("");
-
-    const formData = new FormData(form);
-    formData.set("guestCount", String(guestCount));
-    guests.forEach((guest, index) => {
-      formData.set(`guest_${index}_name`, guest.name);
-      formData.set(`guest_${index}_age`, guest.age);
-      formData.set(`guest_${index}_gender`, guest.gender);
-      formData.set(`guest_${index}_idType`, guest.idType);
-      formData.set(`guest_${index}_idNumber`, guest.idNumber);
-      if (guest.front) formData.set(`guest_${index}_front`, guest.front);
-      if (guest.back) formData.set(`guest_${index}_back`, guest.back);
-    });
-
+    setInquiryState("sending");
+    setInquiryMessage("");
     try {
-      const response = await fetch("/api/guest-entry", { method: "POST", body: formData });
-      const result = (await response.json()) as { message?: string; reference?: string; error?: string };
-      if (!response.ok) throw new Error(result.error || "We could not submit the form.");
-      setStatus("success");
-      setMessage(`Details and photos emailed successfully. Reference: ${result.reference}`);
+      const response = await fetch("/api/enquiry", { method: "POST", body: formData });
+      const result = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Your inquiry could not be sent.");
+      setInquiryState("sent");
+      setInquiryMessage(result.message || "Thank you. The villa team will be in touch shortly.");
       form.reset();
-      setGuestCount(0);
-      setGuests([]);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "We could not submit the form. Please try again.");
+      setInquiryState("error");
+      setInquiryMessage(error instanceof Error ? error.message : "Your inquiry could not be sent. Please try again.");
     }
   }
 
   return (
-    <main>
-      <header className="hero">
-        <div className="hero-inner">
-          <div className="brand-mark">
-            <img src="/rudransh-villa-logo.png" alt="Rudransh Villa" />
-          </div>
-          <div>
-            <p className="eyebrow">Rudransh Villa · Udaipur</p>
-            <h1>Guest entry form</h1>
-            <p className="hero-copy">Complete the details before check-in. It takes about 3 minutes.</p>
-          </div>
-          <div className="privacy-note"><span aria-hidden="true">●</span> Secure submission</div>
-        </div>
+    <main className="villa-site">
+      <header className="villa-nav">
+        <a className="villa-wordmark" href="#top" aria-label="Rudransh Villa home">
+          <Image className="villa-logo" src="/rudransh-villa-logo.png" alt="" width={48} height={48} priority />
+          <span>RUDRANSH <small>VILLA</small></span>
+        </a>
+        <button className="villa-menu" type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+          {menuOpen ? "Close" : "Menu"}
+        </button>
+        <nav className={menuOpen ? "villa-links is-open" : "villa-links"} aria-label="Main navigation">
+          <a href="#stay" onClick={() => setMenuOpen(false)}>The stay</a>
+          <a href="#experience" onClick={() => setMenuOpen(false)}>Experience</a>
+          <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
+          <a className="villa-nav-cta" href="#contact" onClick={() => setMenuOpen(false)}>Enquire</a>
+        </nav>
       </header>
 
-      <form onSubmit={submit}>
-        {message && <div className={`notice ${status}`} role="status">{message}</div>}
-
-        <section className="card">
-          <div className="section-heading">
-            <span className="step">01</span>
-            <div><h2>Booking details</h2><p>Tell us when you are staying.</p></div>
+      <section className="villa-hero" id="top">
+        <motion.div className="villa-hero-art" aria-hidden="true" animate={reducedMotion ? undefined : { scale: [1, 1.045], x: [0, -12] }} transition={{ duration: 18, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}><i /><i /><i /></motion.div>
+        <motion.div className="villa-hero-copy" initial={reducedMotion ? false : { opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}>
+          <p className="villa-kicker">A private Udaipur homestay</p>
+          <h1>Where the day<br />learns to <em>linger.</em></h1>
+          <p className="villa-intro">Rudransh Villa is a slower way into Udaipur—framed by water, open sky, and the comfort of having nowhere else to be.</p>
+          <div className="villa-actions">
+            <a className="villa-button" href="#contact">Plan your stay <span>↗</span></a>
+            <a className="villa-text-link" href="#stay">Discover Rudransh <span>↓</span></a>
           </div>
-          <div className="field-grid">
-            <label className="wide"><span>Primary mobile number</span><input name="mobile" type="tel" inputMode="tel" minLength={10} maxLength={15} pattern="[0-9 +()\-]{10,15}" required placeholder="10-digit mobile number" /></label>
-            <label><span>Check-in date</span><input name="checkIn" type="date" required /></label>
-            <label><span>Check-out date</span><input name="checkOut" type="date" required /></label>
-            <label className="wide"><span>Permanent address</span><textarea name="address" required minLength={10} rows={3} placeholder="House, street, city, state and PIN code" /></label>
-            <label><span>Vehicle number <em>optional</em></span><input name="vehicleNumber" placeholder="e.g. RJ 27 AB 1234" /></label>
-            <label><span>Number of guests</span><select value={guestCount || ""} required onChange={(event) => changeGuestCount(Number(event.target.value))}><option value="" disabled>Select number of guests</option>{[1,2,3,4,5,6].map((count) => <option key={count} value={count}>{count} {count === 1 ? "guest" : "guests"}</option>)}</select></label>
-          </div>
-        </section>
+        </motion.div>
+        <div className="villa-hero-note"><span>01</span><span>Begin the journey<br />beyond the city</span></div>
+      </section>
 
-        <section className="card guests-card">
-          <div className="section-heading">
-            <span className="step">02</span>
-            <div><h2>Guest details</h2><p>Add identity details and both sides of each ID.</p></div>
-            <span className="guest-count">{progress}</span>
-          </div>
+      <motion.section className="villa-manifesto" id="stay" {...reveal}>
+        <p className="villa-kicker">Chapter one · Arrival</p>
+        <div className="villa-split-heading">
+          <h2>Leave the city.<br />Keep the <em>feeling.</em></h2>
+          <p>There is a different pace once you reach the villa. Fewer decisions. Longer pauses. A stay shaped around the people you arrived with.</p>
+        </div>
+        <div className="villa-marquee" aria-label="Private · Udaipur · Poolside · Unhurried">
+          <span>PRIVATE</span><b>✦</b><span>UDAIPUR</span><b>✦</b><span>POOLSIDE</span><b>✦</b><span>UNHURRIED</span><b>✦</b>
+        </div>
+      </motion.section>
 
-          {guestCount === 0 ? <p className="select-guests-note">Select the number of guests above to open their detail sections.</p> : <div className="guest-list">
-            {guests.map((guest, index) => (
-              <fieldset className="guest" id={`guest-card-${index}`} key={index}>
-                <legend><span>{String(index + 1).padStart(2, "0")}</span> Guest {index + 1}{index === 0 && <small>Primary guest</small>}</legend>
-                <div className="field-grid">
-                  <label className="wide"><span>Full name as on ID</span><input value={guest.name} onChange={(e) => updateGuest(index, "name", e.target.value)} minLength={2} maxLength={100} required placeholder="Enter full name" /></label>
-                  <label><span>Age</span><input value={guest.age} onChange={(e) => updateGuest(index, "age", e.target.value)} type="number" min="0" max="120" required placeholder="Age" /></label>
-                  <label><span>Gender</span><select value={guest.gender} onChange={(e) => updateGuest(index, "gender", e.target.value)} required><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option></select></label>
-                  <label><span>ID type</span><select value={guest.idType} onChange={(e) => updateGuest(index, "idType", e.target.value)}><option>Aadhaar Card</option><option>Driving Licence</option><option>Passport</option><option>Voter ID</option><option>Other Government ID</option></select></label>
-                  <label><span>ID number</span><input value={guest.idNumber} onChange={(e) => updateGuest(index, "idNumber", e.target.value)} minLength={4} maxLength={30} required placeholder="Enter ID number" /></label>
-                </div>
-                <div className="upload-grid">
-                  <UploadField guestIndex={index} side="front" file={guest.front} onChange={(e) => handleFile(index, "front", e)} />
-                  <UploadField guestIndex={index} side="back" file={guest.back} onChange={(e) => handleFile(index, "back", e)} />
-                </div>
-                <p className="upload-help">JPG, PNG or WebP · Large photos are automatically reduced · Details must be readable</p>
-              </fieldset>
-            ))}
-          </div>}
-        </section>
+      <motion.section className="villa-arrival" {...reveal}>
+        <div className="villa-arrival-image" aria-hidden="true" />
+        <div className="villa-arrival-story"><p className="villa-kicker">A private arrival</p><span className="villa-chapter-number">01</span><h2>Let Udaipur<br />open <em>slowly.</em></h2><p>Past the usual rush, a quieter address waits. It is a place to arrive without performing the holiday—just step in, exhale, and let the day unfold.</p></div>
+      </motion.section>
 
-        <section className="card consent-card">
-          <div className="section-heading">
-            <span className="step">03</span>
-            <div><h2>Declaration</h2><p>Please confirm before submitting.</p></div>
-          </div>
-          <label className="checkbox"><input type="checkbox" name="consent" required /><span>I confirm that the information and identity documents provided are correct. I consent to Rudransh Villa using them only for guest verification, safety and legal compliance.</span></label>
-          <button type="submit" disabled={status === "sending"}>{status === "sending" ? "Submitting securely…" : "Submit guest details"}<span aria-hidden="true">→</span></button>
-          <p className="submit-note">Details and ID photos are emailed to rudranshvillaudaipur@gmail.com and are not stored by this form.</p>
-        </section>
-      </form>
+      <motion.section className="villa-city-story" id="experience" ref={cityStoryRef} {...reveal}>
+        <motion.div className="villa-city-story-image" aria-hidden="true" style={reducedMotion ? undefined : { y: cityImageY }} />
+        <span className="villa-film-edge" aria-hidden="true" />
+        <div className="villa-city-story-copy"><p className="villa-kicker">Opening frame · Rudransh Villa</p><span className="villa-story-count">01 <i /> 03</span><h2>A private place<br />to <em>stay longer.</em></h2><p>From the first quiet moment to the last unhurried evening, every part of the villa is made for being together without a schedule.</p><span className="villa-scene-direction">FADE IN · YOUR STAY BEGINS</span></div>
+      </motion.section>
 
-      <footer><span>Rudransh Villa</span><span>Udaipur, Rajasthan</span></footer>
+      <motion.section className="villa-rhythm" {...reveal}>
+        <div className="villa-rhythm-heading"><p className="villa-kicker">A stay in three scenes</p><span className="villa-journey-line" aria-hidden="true"><i /></span><h2>Your time here,<br /><em>unfolding slowly.</em></h2></div>
+        <div className="villa-rhythm-grid">
+          {moments.map(([number, title, copy], index) => <motion.article className="villa-rhythm-card" key={number} initial={reducedMotion ? false : { opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, delay: reducedMotion ? 0 : index * 0.14, ease: "circOut" }}><span>{number}</span><h3>{title}</h3><p>{copy}</p></motion.article>)}
+        </div>
+      </motion.section>
+
+      <motion.section className="villa-pool-simple" {...reveal}>
+        <motion.div initial={reducedMotion ? false : { opacity: 0, x: -34 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.35 }} transition={{ duration: 0.8, ease: "circOut" }}><p className="villa-kicker">Final frame · Rudransh Villa</p><span className="villa-story-count">03 <i /> 03</span><h2>Slow afternoons.<br /><em>Still evenings.</em></h2><p>Enjoy the pool between 7 AM and 7 PM, settle into air-conditioned comfort, and let the villa be the part of Udaipur that is entirely yours.</p><a className="villa-button" href="#contact">Start your story <span>↗</span></a></motion.div>
+      </motion.section>
+
+      <motion.section className="villa-contact" id="contact" {...reveal}>
+        <p className="villa-kicker">The final chapter is yours</p>
+        <h2>Bring your people.<br />We will hold the <em>moment.</em></h2>
+        <p>Maybe it is a quiet family escape, a long-awaited reunion, or simply a few days near Udaipur&apos;s lakes and old-city glow. Tell us your dates and we will help shape the stay around you.</p>
+        <form className="villa-inquiry-form" onSubmit={submitInquiry}>
+          <label><span>Your name</span><input name="name" autoComplete="name" minLength={2} maxLength={100} required placeholder="Full name" /></label>
+          <label><span>Mobile number</span><input name="mobile" type="tel" inputMode="tel" autoComplete="tel" pattern="[0-9 +()\-]{10,15}" minLength={10} maxLength={15} required placeholder="10-digit mobile number" /></label>
+          <label><span>Email <em>optional</em></span><input name="email" type="email" autoComplete="email" placeholder="name@example.com" /></label>
+          <label><span>Guests</span><select name="guests" defaultValue="2" required>{[1, 2, 3, 4, 5, 6].map((count) => <option key={count} value={count}>{count} {count === 1 ? "guest" : "guests"}</option>)}</select></label>
+          <label><span>Check-in</span><input name="checkIn" type="date" required /></label>
+          <label><span>Check-out</span><input name="checkOut" type="date" required /></label>
+          <label className="villa-inquiry-note"><span>Your note <em>optional</em></span><textarea name="message" rows={3} maxLength={1000} placeholder="Tell us what you have in mind" /></label>
+          <button className="villa-inquiry-submit" type="submit" disabled={inquiryState === "sending"}>{inquiryState === "sending" ? "Sending inquiry…" : "Send inquiry"}<span aria-hidden="true">↗</span></button>
+          {inquiryMessage && <p className={`villa-inquiry-status ${inquiryState}`} role="status">{inquiryMessage}</p>}
+        </form>
+        <a className="villa-contact-email" href="mailto:rudranshvillaudaipur@gmail.com">rudranshvillaudaipur@gmail.com <span>↗</span></a>
+      </motion.section>
+
+      <footer className="villa-footer"><span>© Rudransh Villa</span><span>Udaipur, Rajasthan, India</span><span>Private homestay</span></footer>
     </main>
   );
 }
