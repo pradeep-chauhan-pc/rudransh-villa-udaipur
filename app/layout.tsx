@@ -4,7 +4,7 @@ import "./globals.css";
 
 const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"] });
 const display = Playfair_Display({ variable: "--font-display", subsets: ["latin"] });
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined))?.replace(/\/$/, "");
 
 export const metadata: Metadata = {
   metadataBase: siteUrl ? new URL(siteUrl) : undefined,
