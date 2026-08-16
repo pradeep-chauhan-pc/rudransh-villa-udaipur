@@ -20,9 +20,8 @@ export const metadata: Metadata = {
     siteName: "Rudransh Villa",
     title: "Rudransh Villa | Private Luxury Homestay in Udaipur",
     description: "A private villa stay with a swimming pool, garden, and room for time together.",
-    images: [{ url: "/images/rudransh-villa-concept-hero.png", width: 1680, height: 1120, alt: "Poolside view at Rudransh Villa" }],
   },
-  twitter: { card: "summary_large_image", title: "Rudransh Villa | Private Luxury Homestay", description: "A private villa stay with a pool and garden.", images: ["/images/rudransh-villa-concept-hero.png"] },
+  twitter: { card: "summary_large_image", title: "Rudransh Villa | Private Luxury Homestay", description: "A private villa stay with a pool and garden." },
   robots: { index: true, follow: true },
 };
 
