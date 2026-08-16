@@ -1,14 +1,12 @@
 const RECIPIENT = "rudranshvillaudaipur@gmail.com";
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const TERMS_VERSION = "2026-08-09";
 
 type GuestRecord = {
   name: string;
-  dateOfBirth: string;
   gender: string;
   nationality: string;
-  address: string;
   idType: string;
   idNumber: string;
   foreignDetails?: {
@@ -34,6 +32,7 @@ function safePart(input: string) {
 }
 
 function fileExtension(file: File) {
+  if (file.type === "application/pdf") return "pdf";
   if (file.type === "image/png") return "png";
   if (file.type === "image/webp") return "webp";
   return "jpg";
@@ -69,13 +68,10 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const guestCount = Number(value(form, "guestCount"));
     const mobile = value(form, "mobile");
-    const email = value(form, "email");
     const checkIn = value(form, "checkIn");
     const checkInTime = value(form, "checkInTime");
     const checkOut = value(form, "checkOut");
     const checkOutTime = value(form, "checkOutTime");
-    const bookingReference = value(form, "bookingReference");
-    const vehicleNumber = value(form, "vehicleNumber");
     const declarationName = value(form, "declarationName");
     const consent = value(form, "consent");
     const propertyRulesAcknowledged = value(form, "propertyRulesAcknowledged");
@@ -89,9 +85,6 @@ export async function POST(request: Request) {
     }
     if (!/^[0-9 +()\-]{10,15}$/.test(mobile)) {
       return Response.json({ error: "Please enter a valid mobile number." }, { status: 400 });
-    }
-    if (email && (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254)) {
-      return Response.json({ error: "Please enter a valid email address." }, { status: 400 });
     }
     if (!isDate(checkIn) || !isDate(checkOut) || !isTime(checkInTime) || !isTime(checkOutTime)) {
       return Response.json({ error: "Please enter valid check-in and check-out dates and times." }, { status: 400 });
@@ -110,28 +103,23 @@ export async function POST(request: Request) {
 
     for (let index = 0; index < guestCount; index++) {
       const name = value(form, `guest_${index}_name`);
-      const dateOfBirth = value(form, `guest_${index}_dateOfBirth`);
       const gender = value(form, `guest_${index}_gender`);
       const nationality = value(form, `guest_${index}_nationality`);
       const residencyStatus = value(form, `guest_${index}_residencyStatus`);
-      const address = value(form, `guest_${index}_address`);
       const idType = value(form, `guest_${index}_idType`);
       const idNumber = value(form, `guest_${index}_idNumber`);
       const front = form.get(`guest_${index}_front`);
       const back = form.get(`guest_${index}_back`);
 
-      if (name.length < 2 || !dateOfBirth || !gender || nationality.length < 2 || address.length < 10 || !idType || idNumber.length < 4 || !(front instanceof File) || !(back instanceof File)) {
+      if (name.length < 2 || !gender || nationality.length < 2 || !idType || idNumber.length < 4 || !(front instanceof File) || !(back instanceof File)) {
         return Response.json({ error: `Please complete all details for Guest ${index + 1}.` }, { status: 400 });
-      }
-      if (!isDate(dateOfBirth) || dateOfBirth >= checkIn) {
-        return Response.json({ error: `Please enter a valid date of birth for Guest ${index + 1}.` }, { status: 400 });
       }
       if (residencyStatus !== "indian" && residencyStatus !== "foreign") {
         return Response.json({ error: `Please select a valid guest category for Guest ${index + 1}.` }, { status: 400 });
       }
       for (const [side, file] of [["front", front], ["back", back]] as const) {
         if (!ALLOWED_TYPES.has(file.type) || file.size > MAX_FILE_BYTES || file.size === 0) {
-          return Response.json({ error: `Guest ${index + 1} ${side} photo could not be accepted. Please choose a JPG, PNG or WebP image and try again.` }, { status: 400 });
+          return Response.json({ error: `Guest ${index + 1} ${side} document could not be accepted. Please choose a JPG, PNG, WebP, or PDF file under 2 MB and try again.` }, { status: 400 });
         }
       }
 
@@ -163,7 +151,7 @@ export async function POST(request: Request) {
         { filename: `${guestName}-${residencyStatus === "foreign" ? "passport" : "front"}.${fileExtension(front)}`, content: toBase64(frontBytes) },
         { filename: `${guestName}-${residencyStatus === "foreign" ? "visa-or-oci" : "back"}.${fileExtension(back)}`, content: toBase64(backBytes) },
       );
-      records.push({ name, dateOfBirth, gender, nationality, address, idType, idNumber, foreignDetails });
+      records.push({ name, gender, nationality, idType, idNumber, foreignDetails });
     }
 
     if (normaliseName(declarationName) !== normaliseName(records[0].name)) {
@@ -178,7 +166,7 @@ export async function POST(request: Request) {
       const immigration = guest.foreignDetails
         ? `Passport: ${escapeHtml(guest.foreignDetails.passportNumber)} (${escapeHtml(guest.foreignDetails.passportIssuePlace)}, expires ${guest.foreignDetails.passportExpiryDate})<br>Visa/OCI: ${escapeHtml(guest.foreignDetails.visaOrOciNumber)} · ${escapeHtml(guest.foreignDetails.visaOrOciType)} (expires ${guest.foreignDetails.visaOrOciExpiryDate})<br>India arrival: ${guest.foreignDetails.arrivalInIndiaDate}, ${escapeHtml(guest.foreignDetails.arrivalInIndiaPlace)} from ${escapeHtml(guest.foreignDetails.arrivedFrom)}<br>Next destination: ${escapeHtml(guest.foreignDetails.nextDestination)}`
         : "Indian citizen";
-      return `<tr><td>${index + 1}</td><td>${escapeHtml(guest.name)}</td><td>${guest.dateOfBirth}</td><td>${escapeHtml(guest.gender)}</td><td>${escapeHtml(guest.nationality)}</td><td>${escapeHtml(guest.address)}</td><td>${escapeHtml(guest.idType)}: ${escapeHtml(guest.idNumber)}</td><td>${immigration}</td></tr>`;
+      return `<tr><td>${index + 1}</td><td>${escapeHtml(guest.name)}</td><td>${escapeHtml(guest.gender)}</td><td>${escapeHtml(guest.nationality)}</td><td>${escapeHtml(guest.idType)}: ${escapeHtml(guest.idNumber)}</td><td>${immigration}</td></tr>`;
     }).join("");
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -187,7 +175,7 @@ export async function POST(request: Request) {
         from: process.env.EMAIL_FROM || "Rudransh Villa <onboarding@resend.dev>",
         to: [RECIPIENT],
         subject: `Guest entry: ${reference} · ${checkIn} · ${records[0].name}`,
-        html: `<h2>New homestay guest entry</h2><p><strong>Reference:</strong> ${reference}</p><p><strong>Stay:</strong> ${checkIn} ${checkInTime} to ${checkOut} ${checkOutTime}<br><strong>Mobile:</strong> ${escapeHtml(mobile)}<br><strong>Email:</strong> ${escapeHtml(email || "Not provided")}<br><strong>Booking reference:</strong> ${escapeHtml(bookingReference || "Not provided")}<br><strong>Vehicle:</strong> ${escapeHtml(vehicleNumber || "Not provided")}<br><strong>Primary guest acknowledgement:</strong> ${escapeHtml(declarationName)}<br><strong>Property rules accepted:</strong> Yes<br><strong>Terms version:</strong> ${TERMS_VERSION}<br><strong>Submitted (UTC):</strong> ${submittedAt}</p><table border="1" cellpadding="7" cellspacing="0"><thead><tr><th>#</th><th>Name</th><th>DOB</th><th>Gender</th><th>Nationality</th><th>Permanent address</th><th>ID</th><th>Immigration details</th></tr></thead><tbody>${guestRows}</tbody></table><p>Verify every original document at arrival. For each foreign national or OCI cardholder, submit the official Form C/III to FRRO/FRO within 24 hours; this email is not the government filing.</p>`,
+        html: `<h2>New homestay guest entry</h2><p><strong>Reference:</strong> ${reference}</p><p><strong>Stay:</strong> ${checkIn} ${checkInTime} to ${checkOut} ${checkOutTime}<br><strong>Mobile:</strong> ${escapeHtml(mobile)}<br><strong>Primary guest acknowledgement:</strong> ${escapeHtml(declarationName)}<br><strong>Property rules accepted:</strong> Yes<br><strong>Terms version:</strong> ${TERMS_VERSION}<br><strong>Submitted (UTC):</strong> ${submittedAt}</p><table border="1" cellpadding="7" cellspacing="0"><thead><tr><th>#</th><th>Name</th><th>Gender</th><th>Nationality</th><th>ID</th><th>Immigration details</th></tr></thead><tbody>${guestRows}</tbody></table><p>Verify every original document at arrival. For each foreign national or OCI cardholder, submit the official Form C/III to FRRO/FRO within 24 hours; this email is not the government filing.</p>`,
         attachments,
       }),
     });

@@ -4,11 +4,9 @@ import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 
 type Guest = {
   name: string;
-  dateOfBirth: string;
   gender: string;
   nationality: string;
   residencyStatus: "indian" | "foreign";
-  address: string;
   idType: string;
   idNumber: string;
   passportNumber: string;
@@ -27,11 +25,9 @@ type Guest = {
 
 const blankGuest = (): Guest => ({
   name: "",
-  dateOfBirth: "",
   gender: "",
   nationality: "India",
   residencyStatus: "indian",
-  address: "",
   idType: "Aadhaar Card",
   idNumber: "",
   passportNumber: "",
@@ -49,6 +45,7 @@ const blankGuest = (): Guest => ({
 });
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_PDF_BYTES = 2 * 1024 * 1024;
 const TARGET_FILE_BYTES = 1.5 * 1024 * 1024;
 const TERMS_VERSION = "2026-08-09";
 
@@ -106,7 +103,7 @@ function UploadField({
         className="sr-only"
         type="file"
         name={`guest_${guestIndex}_${side}`}
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         capture="environment"
         required
         onChange={onChange}
@@ -138,23 +135,24 @@ export default function Home() {
 
   async function handleFile(index: number, side: "front" | "back", event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
-    if (file && file.size > MAX_UPLOAD_BYTES) {
+    const maxBytes = file?.type === "application/pdf" ? MAX_PDF_BYTES : MAX_UPLOAD_BYTES;
+    if (file && file.size > maxBytes) {
       event.target.value = "";
       updateGuest(index, side, null);
       setStatus("error");
-      setMessage("This photo is too large. Please choose a photo smaller than 8 MB.");
+      setMessage(file.type === "application/pdf" ? "This PDF is too large. Please choose one smaller than 2 MB." : "This photo is too large. Please choose a photo smaller than 8 MB.");
       return;
     }
     try {
       setStatus("idle");
-      setMessage(file && file.size > TARGET_FILE_BYTES ? "Optimising photo…" : "");
-      updateGuest(index, side, file ? await optimisePhoto(file) : null);
+      setMessage(file && file.type !== "application/pdf" && file.size > TARGET_FILE_BYTES ? "Optimising photo…" : "");
+      updateGuest(index, side, file && file.type !== "application/pdf" ? await optimisePhoto(file) : file);
       setMessage("");
     } catch {
       event.target.value = "";
       updateGuest(index, side, null);
       setStatus("error");
-      setMessage("This photo format could not be processed. Please use a JPG, PNG or WebP image.");
+      setMessage("This file could not be processed. Please use a JPG, PNG, WebP, or PDF file.");
     }
   }
 
@@ -176,11 +174,9 @@ export default function Home() {
     formData.set("guestCount", String(guestCount));
     guests.forEach((guest, index) => {
       formData.set(`guest_${index}_name`, guest.name);
-      formData.set(`guest_${index}_dateOfBirth`, guest.dateOfBirth);
       formData.set(`guest_${index}_gender`, guest.gender);
       formData.set(`guest_${index}_nationality`, guest.nationality);
       formData.set(`guest_${index}_residencyStatus`, guest.residencyStatus);
-      formData.set(`guest_${index}_address`, guest.address);
       formData.set(`guest_${index}_idType`, guest.idType);
       formData.set(`guest_${index}_idNumber`, guest.idNumber);
       formData.set(`guest_${index}_passportNumber`, guest.passportNumber);
@@ -239,13 +235,10 @@ export default function Home() {
           </div>
           <div className="field-grid">
             <label className="wide"><span>Primary mobile number</span><input name="mobile" type="tel" inputMode="tel" minLength={10} maxLength={15} pattern="[0-9 +()\-]{10,15}" required placeholder="10-digit mobile number" /></label>
-            <label className="wide"><span>Primary email address <em>optional</em></span><input name="email" type="email" autoComplete="email" placeholder="name@example.com" /></label>
             <label><span>Check-in date</span><input name="checkIn" type="date" required /></label>
             <label><span>Check-in time</span><input name="checkInTime" type="time" required /></label>
             <label><span>Check-out date</span><input name="checkOut" type="date" required /></label>
             <label><span>Check-out time</span><input name="checkOutTime" type="time" value="10:00" readOnly aria-readonly="true" /></label>
-            <label className="wide"><span>Booking source <em>optional</em></span><select name="bookingReference" defaultValue=""><option value="">Select booking source</option><option>Direct booking</option><option>Airbnb</option><option>Booking.com</option><option>MakeMyTrip</option><option>Goibibo</option><option>Agoda</option><option>Other</option></select></label>
-            <label><span>Vehicle number <em>optional</em></span><input name="vehicleNumber" placeholder="e.g. RJ 27 AB 1234" /></label>
             <label><span>Number of guests</span><select value={guestCount || ""} required onChange={(event) => changeGuestCount(Number(event.target.value))}><option value="" disabled>Select number of guests</option>{[1,2,3,4,5,6].map((count) => <option key={count} value={count}>{count} {count === 1 ? "guest" : "guests"}</option>)}</select></label>
           </div>
         </section>
@@ -263,11 +256,9 @@ export default function Home() {
                 <legend><span>{String(index + 1).padStart(2, "0")}</span> Guest {index + 1}{index === 0 && <small>Primary guest</small>}</legend>
                 <div className="field-grid">
                   <label className="wide"><span>Full name as on ID</span><input value={guest.name} onChange={(e) => updateGuest(index, "name", e.target.value)} minLength={2} maxLength={100} required placeholder="Enter full name" /></label>
-                  <label><span>Date of birth</span><input value={guest.dateOfBirth} onChange={(e) => updateGuest(index, "dateOfBirth", e.target.value)} type="date" required /></label>
                   <label><span>Gender</span><select value={guest.gender} onChange={(e) => updateGuest(index, "gender", e.target.value)} required><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option></select></label>
                   <label><span>Guest category</span><select value={guest.residencyStatus} onChange={(e) => updateGuest(index, "residencyStatus", e.target.value)} required><option value="indian">Indian citizen</option><option value="foreign">Foreign national / OCI cardholder</option></select></label>
                   <label><span>Nationality</span><input value={guest.nationality} onChange={(e) => updateGuest(index, "nationality", e.target.value)} minLength={2} maxLength={60} required placeholder="e.g. India" /></label>
-                  <label className="wide"><span>Permanent residential address</span><textarea value={guest.address} onChange={(e) => updateGuest(index, "address", e.target.value)} minLength={10} maxLength={300} rows={3} required placeholder="House, street, city, state/province, country and postal code" /></label>
                   <label><span>ID type</span><select value={guest.idType} onChange={(e) => updateGuest(index, "idType", e.target.value)}><option>Aadhaar Card</option><option>Driving Licence</option><option>Passport</option><option>Voter ID</option><option>Other Government ID</option></select></label>
                   <label><span>ID number</span><input value={guest.idNumber} onChange={(e) => updateGuest(index, "idNumber", e.target.value)} minLength={4} maxLength={30} required placeholder="Enter ID number" /></label>
                 </div>
@@ -288,7 +279,7 @@ export default function Home() {
                   <UploadField guestIndex={index} side="front" file={guest.front} label={guest.residencyStatus === "foreign" ? "Passport photo page" : undefined} onChange={(e) => handleFile(index, "front", e)} />
                   <UploadField guestIndex={index} side="back" file={guest.back} label={guest.residencyStatus === "foreign" ? "Visa / OCI card" : undefined} onChange={(e) => handleFile(index, "back", e)} />
                 </div>
-                <p className="upload-help">JPG, PNG or WebP · Large photos are automatically reduced · Details must be readable. Original documents must be checked in person at arrival.</p>
+                <p className="upload-help">JPG, PNG, WebP or PDF · Images are automatically reduced · PDFs must be under 2 MB · Details must be readable. Original documents must be checked in person at arrival.</p>
               </fieldset>
             ))}
           </div>}
