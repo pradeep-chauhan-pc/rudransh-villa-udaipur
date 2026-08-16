@@ -49,6 +49,12 @@ const MAX_PDF_BYTES = 2 * 1024 * 1024;
 const TARGET_FILE_BYTES = 1.5 * 1024 * 1024;
 const TERMS_VERSION = "2026-08-09";
 
+function today() {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
+}
+
 async function optimisePhoto(file: File) {
   if (file.size <= TARGET_FILE_BYTES) return file;
 
@@ -113,6 +119,7 @@ function UploadField({
 }
 
 export default function Home() {
+  const defaultCheckInDate = today();
   const [guestCount, setGuestCount] = useState(0);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
@@ -235,8 +242,8 @@ export default function Home() {
           </div>
           <div className="field-grid">
             <label className="wide"><span>Primary mobile number</span><input name="mobile" type="tel" inputMode="tel" minLength={10} maxLength={15} pattern="[0-9 +()\-]{10,15}" required placeholder="10-digit mobile number" /></label>
-            <label><span>Check-in date</span><input name="checkIn" type="date" required /></label>
-            <label><span>Check-in time</span><input name="checkInTime" type="time" required /></label>
+            <label><span>Check-in date</span><input name="checkIn" type="date" defaultValue={defaultCheckInDate} required /></label>
+            <label><span>Check-in time</span><input name="checkInTime" type="time" defaultValue="13:00" required /></label>
             <label><span>Check-out date</span><input name="checkOut" type="date" required /></label>
             <label><span>Check-out time</span><input name="checkOutTime" type="time" value="10:00" readOnly aria-readonly="true" /></label>
             <label><span>Number of guests</span><select value={guestCount || ""} required onChange={(event) => changeGuestCount(Number(event.target.value))}><option value="" disabled>Select number of guests</option>{[1,2,3,4,5,6].map((count) => <option key={count} value={count}>{count} {count === 1 ? "guest" : "guests"}</option>)}</select></label>

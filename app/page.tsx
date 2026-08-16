@@ -208,6 +208,7 @@ export default function Home() {
           {inquiryMessage && <p className={`villa-inquiry-status ${inquiryState}`} role="status">{inquiryMessage}</p>}
         </form>
         <a className="villa-whatsapp-button" href={WHATSAPP_URL} target="_blank" rel="noreferrer">Chat on WhatsApp <span aria-hidden="true">↗</span></a>
+        <p className="villa-policy-link">By checking availability, you agree to review the <a href="/policies">stay policies and house rules</a>.</p>
       </motion.section>
 
       <footer className="villa-footer"><span>© Rudransh Villa</span><nav aria-label="Stay guides"><a href="/faq">FAQs</a><a href="/policies">Stay policies</a><a href="/luxury-villa-udaipur">Luxury villa</a><a href="/private-pool-villa-udaipur">Private pool villa</a><a href="/homestay-in-udaipur">Private homestay</a></nav><span>Private villa</span></footer>
